@@ -10,9 +10,9 @@ double cw1 = 1, cw2 = 1, cw3 = 0.4, delt = 3; //excess, disjoint, matching weigh
 double mut = 0.8, rel = 0.9; //weight mutation rate, relative mutation vs absolute reassignment
 double mug = 0.25, msg = 0.5, muh = 0.7, msh = 0.6; //{intensity, standard deviation} of relative mutation, absolute mutation
 double dsi = 0.75, dtd = 0.05, dte = 0.05; //gene deactivation inheritance, gene deactivation mutation rate, gene activation mutation rate
-double adn = 0.1, adw = 0.1; //rate of edge-split node addition mutation, edge addition mutation
-double sur = 0.7, isp = 0.005; //proportion of average fitness threshold for survival, interspecies mating rate
-double pur = 0.25, pud = 0.1; //probability of descent with mutation absent crossover, descent with crossover absent mutation
+double adn = 0.06, adw = 0.16; //rate of edge-split node addition mutation, edge addition mutation
+double sur = 0.7, isp = 0.005; //proportion of immediate survival, interspecies mating rate
+double pur = 0.25, pum = 0.04, pud = 0.1; //probability of descent with mutation absent crossover, neither given former, descent with crossover absent mutation
 queue<int> q; //heap queue for network query - node identifiers
 map<int, pair<int, double> > m; //heap map for network query - node identifiers to remaining edge dependencies, activation
 map<int, int> rm; //heap map for phenotype node index based on identifier
@@ -175,16 +175,30 @@ net ncr(net a, net b) { //crossbreed
 
 struct spec {
     int n, ag, ls; //identifier, species age, time since last improvement
-    double mf; //max fitness so far
+    double F, mf; //current fitness, max fitness so far
     vector<net> pop; //species subpopulation
+    net rep;
 
-    net rep() {return pop[0];} //species representative for containment test
-
-    spec sbp(int m) { //best m of species subpopulation
-        spec spr = {.n = n, .ag = ag, .ls = ls, .mf = mf, .pop = pop};
-        sort(spr.pop.begin(), spr.pop.end(), invnetcmp());
-        while (spr.pop.size() > m) spr.pop.pop_back();
+    spec sbp(int m, int r) { //bottleneck to best m and regenerate to r
+        int a, b;
+        sort(pop.begin(), pop.end(), invnetcmp());
+        spec spr = {.n = n, .ag = ag, .ls = ls, .F = 0, .mf = mf, .pop = pop};
+        if (r >= lar) spr.pop.push_back(pop[0]);
+        while (spr.pop.size() < r) {
+            if (rdn() < pur) spr.pop.push_back(rdn() < pum ? pop[rng(m)] : mft(pop[rng(m)]));
+            else {
+                a = rng(m);
+                b = rng(m);
+                net pnl = ncr(pop[a], pop[b]);
+                spr.pop.push_back(rdn() < pud ? pnl : mft(pnl));
+            }
+        }
         return spr;
+    }
+
+    double cmf() {
+        for (int i = 0; i < pop.size(); ++i) F = max(F, pop[i].F);
+        F /= pop.size();
     }
 
     static bool eq(net a, net b) { //check for same species
@@ -210,10 +224,10 @@ struct spec {
     }
 };
 
-vector<net> ppn[2]; //population
+vector<net> ppn[2], npv; //population
 vector<spec> spc[2]; //species
 net nnet; //empty net
-spec nspec; //empty species
+spec nspec = {.n = -1, .ag = 0, .ls = 0, .F = 0, .mf = 0, .pop = npv, .rep = nnet}; //empty species
 
 inline void init() {
     //TODO READ INPUT - JAVA INTERFACE
@@ -221,12 +235,34 @@ inline void init() {
 }
 
 inline void epoch(int tI) {
-    //TODO EVALUATE NETS + SPECIES AUGMENTATION
-    //TODO SURVIVAL & ELIMINATION
-    //TODO REGEN POPULATION
-    //TODO REFILL SPECIES
+    int np = 0, sf = 0, a, b, i, j;
+    double sum = 0;
+    //TODO EVALUATE NETS
+    //TODO SPECIATION
+    vector<pair<int, int> > cbp; //bottleneck and regeneration
+    for (i = 0; i < N; ++i) {
+        for (j = 0; j < spc[0].size(); ++j) if (spec::eq(ppn[0][i], spc[0][j].rep)) {spc[0][j].pop.push_back(ppn[0][i]); break;}
+        if (j + 1 > spc[0].size()) {
+            spc[0].push_back(nspec);
+            spc[0].back().n = ins++;
+            spc[0].back().pop.push_back(ppn[0][i]);
+            spc[0].back().rep = ppn[0][i];
+        }
+    }
+    for (i = 0; i < N; ++i) np += rdn() > isp;
+    for (i = 0; i < spc[0].size(); ++i) spc[0][i].cmf(), sum += spc[0][i].F;
+    for (i = 0; i < spc[0].size(); ++i) cbp.push_back(make_pair(max((int) (spc[0][i].pop.size() * sur), 1), (N - np) * spc[0][i].F / sum)), sf += (N - np) * spc[0][i].F / sum;
+    for (i = sf; i < N - np; ++i) ++cbp[rng(spc[0].size())].second;
+    for (i = 0; i < spc[0].size(); ++i) if (cbp[i].second) {
+
+    }
+    for (i = 0; i < np; ++i) {
+
+    }
 
 
+
+    //TODO FINISH REGEN
     idn.clear();
     idl.clear();
 }
