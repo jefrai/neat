@@ -232,11 +232,29 @@ net nnet; //empty net
 spec nspec = {.n = -1, .ag = 0, .ls = 0, .F = 0, .mf = 0, .pop = npv, .rep = nnet}; //empty species
 
 inline void init() {
+    int M, L, n, a, b, e, i, j;
+    double w;
     bool cut;
     FILE* srf = fopen("src.txt", "r");
     fscanf(srf, "%d %d %d %d %d", &N, &T, &n0, &n1, &cut);
+    if (cut) {
+        for (i = 0; i < N; ++i) {
+            ppn[0].push_back(nnet);
+            fscanf(srf, "%d %d", &M, &L);
+            for (j = 0; j < M; ++j) fscanf(srf, "%d", &n), ppn[0].back().node.push_back(n);
+            for (j = 0; j < L; ++j) {
+                fscanf(srf, "%d %d %d %lf %d", &n, &a, &b, &w, &e);
+                edg eg = {.n = n, .a = a, .b = b, .w = w, .e = e};
+                ppn[0].back().edge.push_back(eg);
+            }
+            ppn[0].back().reg();
+        }
+    } else {
+        for (i = 0; i < N; ++i) {
+            //TODO
+        }
+    }
 
-    //TODO
 
     fclose(srf);
 }
@@ -285,6 +303,7 @@ inline void epoch(int tI) {
         --k;
         nb = spc[0][k].pop[gl - h + spc[0][k].pop.size()];
         ppn[1].push_back(rdn() < pud ? ncr(na, nb) : mft(ncr(na, nb)));
+        ppn[1].back().reg();
     }
     swap(ppn[0], ppn[1]);
     ppn[1].clear();
