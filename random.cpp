@@ -1,4 +1,5 @@
 #include <bits/stdc++.h>
+#include <windows.h>
 using namespace std;
 
 int T = 300, N = 150, inn = 0, inw = 0, ins = 0; //epochs, total population size, innovation numbers - node, edge, identifier of species
@@ -44,16 +45,14 @@ struct edg {
 struct edgcmp {inline bool operator() (const edg& a, const edg& b) {return (a.n < b.n);}};
 
 struct net {
-    int L; //layers
-    double F; //fitness value
+    bool E = 0; //fitness evaluated
+    double F = 0; //fitness value
     vector<int> node; //nodes
     vector<edg> edge; //edges - implicitly always sorted by identifier
     vector<vector<edg> > adj, ret; //forward adjacency list, reverse adjacency list
 
     void init() { //initialize one network
-        int i;
-        L = 2;
-        for (i = 0; i < n0 + 1 + n1; ++i) node.push_back(inn++); //extra 1 for bias
+        for (int i = 0; i < n0 + 1 + n1; ++i) node.push_back(inn++); //extra 1 for bias
         adj.resize(n0 + 1 + n1);
         ret.resize(n0 + 1 + n1);
     }
@@ -175,15 +174,15 @@ net ncr(net a, net b) { //crossbreed
 }
 
 struct spec {
-    int n, ag, ls; //identifier, species age, time since last improvement
-    double F, mf; //current fitness, max fitness so far
+    int n = -1, ag = 0, ls = 0; //identifier, species age, time since last improvement
+    double F = 0, mf = 0; //current fitness, max fitness so far
     vector<net> pop; //species subpopulation
     net rep;
 
     spec sbp(int m, int r) { //bottleneck to best m and regenerate to r
         int a, b;
         sort(pop.begin(), pop.end(), invnetcmp());
-        spec spr = {.n = n, .ag = ag, .ls = ls, .F = 0, .mf = mf, .pop = pop};
+        spec spr = *this;
         if (r >= lar) spr.pop.push_back(pop[0]);
         while (spr.pop.size() < r) {
             if (rdn() < pur) spr.pop.push_back(rdn() < pum ? pop[rng(m)] : mft(pop[rng(m)]));
@@ -228,19 +227,21 @@ struct spec {
 
 vector<net> ppn[2], npv; //population
 vector<spec> spc[2]; //species
-net nnet; //empty net
-spec nspec = {.n = -1, .ag = 0, .ls = 0, .F = 0, .mf = 0, .pop = npv, .rep = nnet}; //empty species
+net iet, nnet; //initial net, empty net
+spec nspec;
 
 inline void init() {
-    int M, L, n, a, b, e, i, j;
+    int M, L, n, a, b, e, al0, al1, i, j;
     double w;
-    bool cut;
+    bool cut; //custom nets
     FILE* srf = fopen("src.txt", "r");
-    fscanf(srf, "%d %d %d %d %d", &N, &T, &n0, &n1, &cut);
+    fscanf(srf, "%d %d %d %d", &N, &T, &al0, &al1);
+    fscanf(srf, "%d %d %d %d", &inn, &inw, &ins, &cut);
+    if (n0 != al0 || n1 != al1) if (cut) {n0 = al0; n1 = al1;}
     if (cut) {
         for (i = 0; i < N; ++i) {
             ppn[0].push_back(nnet);
-            fscanf(srf, "%d %d", &M, &L);
+            fscanf(srf, "%d %d %d %d", &M, &L, &ppn[0].back().E, &ppn[0].back().F);
             for (j = 0; j < M; ++j) fscanf(srf, "%d", &n), ppn[0].back().node.push_back(n);
             for (j = 0; j < L; ++j) {
                 fscanf(srf, "%d %d %d %lf %d", &n, &a, &b, &w, &e);
@@ -250,21 +251,49 @@ inline void init() {
             ppn[0].back().reg();
         }
     } else {
-        for (i = 0; i < N; ++i) {
-            //TODO
-        }
+        iet.init();
+        for (i = 0; i < N; ++i) ppn[0].push_back(iet);
     }
-
-
     fclose(srf);
 }
+
+char buf[1000]; //epoch process buffer
 
 inline void epoch(int tI) {
     int np = 0, gl = 0, gm = 0, h, sf = 0, a, b, i, j, k;
     double sum = 0;
     spec tsp;
     net na, nb;
-    //TODO EVALUATE NETS - INPUT
+    for (i = 0; i < N; ++i) if (!ppn[0][i].E) {
+        FILE* tor = fopen("net.txt", "w"), *flag;
+        fprintf(tor, "%d %d %d %d\n", n0, n1, ppn[0][i].node.size(), ppn[0][i].edge.size());
+        for (j = 0; j < ppn[0][i].node.size(); ++j) fprintf(tor, "%d\n", ppn[0][i].node[j]);
+        for (j = 0; j < ppn[0][i].edge.size(); ++j) fprintf(tor, "%d %d %d %lf %d\n", ppn[0][i].edge[j].n, ppn[0][i].edge[j].a, ppn[0][i].edge[j].b, ppn[0][i].edge[j].w, ppn[0][i].edge[j].e);
+        fclose(tor);
+
+        //TODO - VALIDIFY THIS THING
+        STARTUPINFO info={sizeof(info)};
+        PROCESS_INFORMATION processInfo;
+        if (CreateProcess(GetModuleFileName(NULL, buf, sizeof(buf) / sizeof(TCHAR)) + "morerandom.exe", NULL, NULL, NULL, TRUE, 0, NULL, NULL, &info, &processInfo))
+        {
+            WaitForSingleObject(processInfo.hProcess, INFINITE);
+            CloseHandle(processInfo.hProcess);
+            CloseHandle(processInfo.hThread);
+        }
+
+        flag = fopen("run.txt", "w");
+        fclose(flag);
+        while (1) {
+            if (flag = fopen("score.txt", "r")) {
+                fscanf(flag, "%lf", &ppn[0][i].F);
+                ppn[0][i].E = 1;
+                fclose(flag);
+                remove("score.txt");
+                break;
+            }
+            this_thread::sleep_for(chrono::milliseconds(3000));
+        }
+    }
     vector<pair<int, int> > cbp; //bottleneck and regeneration
     for (i = 0; i < N; ++i) {
         for (j = 0; j < spc[0].size(); ++j) if (spec::eq(ppn[0][i], spc[0][j].rep)) {spc[0][j].pop.push_back(ppn[0][i]); break;}
@@ -311,18 +340,46 @@ inline void epoch(int tI) {
     idl.clear();
 }
 
+inline void store() {
+    int i, j;
+    FILE* res = fopen("res.txt", "w");
+    fprintf(res, "%d %d %d %d", N, T, n0, n1);
+    fprintf(res, "%d %d %d %d", inn, inw, ins, 1);
+    for (i = 0; i < N; ++i) {
+        ppn[0].push_back(nnet);
+        fprintf(res, "%d %d %d %d", ppn[0][i].node.size(), ppn[0][i].edge.size(), ppn[0][i].E, ppn[0][i].F);
+        for (j = 0; j < ppn[0][i].node.size(); ++j) fprintf(res, "%d", ppn[0][i].node[j]);
+        for (j = 0; j < ppn[0][i].edge.size(); ++j) fprintf(res, "%d %d %d %lf %d", ppn[0][i].edge[j].n, ppn[0][i].edge[j].a, ppn[0][i].edge[j].b, ppn[0][i].edge[j].w, ppn[0][i].edge[j].e);
+    }
+    fclose(res);
+}
+
 int main() {
     int tI = 0, i;
     FILE* flag;
-    srand(0);
+    //srand(0);
+    srand(time(0));
+    while (1) {
+        if (flag = fopen("init.txt", "r")) {
+            fscanf(flag, "%d %d", &n0, &n1);
+            fclose(flag);
+            remove("init.txt");
+            break;
+        }
+        this_thread::sleep_for(chrono::milliseconds(3000));
+    }
     init();
     while (tI < T) {
-        if (flag = fopen("flag_epoch", "r")) {
+        /*if (flag = fopen("flag_epoch", "r")) {
             fclose(flag);
             remove("flag_epoch");
             epoch(tI++);
+            store();
         }
-        this_thread::sleep_for(chrono::milliseconds(2000));
+        this_thread::sleep_for(chrono::milliseconds(3000));*/
+        epoch(tI++);
     }
-    //TODO OUTPUT RESULT
+    flag = fopen("kys.txt", "w");
+    fclose(flag);
+    return 0;
 }
