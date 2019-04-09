@@ -4,7 +4,7 @@ using namespace std;
 int T = 300, N = 150, inn = 0, inw = 0, ins = 0; //epochs, total population size, innovation numbers - node, edge, identifier of species
 int n0 = 200, n1 = 6; //input nodes, output nodes
 int lar = 5; //threshold for large species - unchanged copy of champion
-int kil = 15; //max generations w/o improvement for species
+double stg = 4; //stagnation time constant
 double sig = 4.9; //sigmoid multiplier
 double cw1 = 1, cw2 = 1, cw3 = 0.4, delt = 3; //excess, disjoint, matching weight, threshold - compatibility constants
 double mut = 0.8, rel = 0.9; //weight mutation rate, relative mutation vs absolute reassignment
@@ -19,6 +19,7 @@ map<int, int> rm; //heap map for phenotype node index based on identifier
 map<int, int> idn; //duplication removal map for node addition - identifier of split edge
 map<pair<int, int>, int> idl; //duplication removal map for edge addition - identifier of two nodes
 
+inline bool eq(double a, double b) {return fabs(a - b) < 0.0001;}
 inline double sgm(double x) {return 1 / (1 + exp(-sig * x));}
 inline long long rng(long long n) {long long i = 0, j; for (j = 0; j < 6; ++j) i *= RAND_MAX, i += rand(), i %= n; return n;}
 inline double rdn() {return ((double) rng(1000000001)) / 1000000000;}
@@ -199,6 +200,7 @@ struct spec {
     double cmf() {
         for (int i = 0; i < pop.size(); ++i) F = max(F, pop[i].F);
         F /= pop.size();
+        if (ag > stg * 3) F /= ag / stg - 2;
     }
 
     static bool eq(net a, net b) { //check for same species
@@ -230,15 +232,21 @@ net nnet; //empty net
 spec nspec = {.n = -1, .ag = 0, .ls = 0, .F = 0, .mf = 0, .pop = npv, .rep = nnet}; //empty species
 
 inline void init() {
-    //TODO READ INPUT - JAVA INTERFACE
-    //TODO GENERATE NETS FROM DEFAULT OR INPUT
+    bool cut;
+    FILE* srf = fopen("src.txt", "r");
+    fscanf(srf, "%d %d %d %d %d", &N, &T, &n0, &n1, &cut);
+
+    //TODO
+
+    fclose(srf);
 }
 
 inline void epoch(int tI) {
-    int np = 0, sf = 0, a, b, i, j;
+    int np = 0, gl = 0, gm = 0, h, sf = 0, a, b, i, j, k;
     double sum = 0;
-    //TODO EVALUATE NETS
-    //TODO SPECIATION
+    spec tsp;
+    net na, nb;
+    //TODO EVALUATE NETS - INPUT
     vector<pair<int, int> > cbp; //bottleneck and regeneration
     for (i = 0; i < N; ++i) {
         for (j = 0; j < spc[0].size(); ++j) if (spec::eq(ppn[0][i], spc[0][j].rep)) {spc[0][j].pop.push_back(ppn[0][i]); break;}
@@ -251,26 +259,51 @@ inline void epoch(int tI) {
     }
     for (i = 0; i < N; ++i) np += rdn() > isp;
     for (i = 0; i < spc[0].size(); ++i) spc[0][i].cmf(), sum += spc[0][i].F;
-    for (i = 0; i < spc[0].size(); ++i) cbp.push_back(make_pair(max((int) (spc[0][i].pop.size() * sur), 1), (N - np) * spc[0][i].F / sum)), sf += (N - np) * spc[0][i].F / sum;
+    for (i = 0; i < spc[0].size(); ++i) cbp.push_back(make_pair(max((int) (spc[0][i].pop.size() * sur), 1), (N - np) * spc[0][i].F / sum)), gl += max((int) (spc[0][i].pop.size() * sur), 1), sf += (N - np) * spc[0][i].F / sum;
     for (i = sf; i < N - np; ++i) ++cbp[rng(spc[0].size())].second;
     for (i = 0; i < spc[0].size(); ++i) if (cbp[i].second) {
-
+        tsp = spc[0][i].sbp(cbp[i].first, cbp[i].second);
+        for (j = 0; j < tsp.pop.size(); ++j) ppn[1].push_back(tsp.pop[j]);
+        spc[1].push_back(spc[0][i]);
+        spc[1].back().rep = spc[1].back().pop[rng(spc[1].back().pop.size())];
+        spc[1].back().pop.clear();
+        ++spc[1].back().ag;
+        if (spc[1].back().mf < spc[1].back().F && !eq(spc[1].back().mf, spc[1].back().F)) {spc[1].back().mf = spc[1].back().F; spc[1].back().ls = 0;}
+        else ++spc[1].back().ls;
+        spc[1].back().F = 0;
     }
+    swap(spc[0], spc[1]);
+    spc[1].clear();
     for (i = 0; i < np; ++i) {
-
+        a = rng(gl);
+        for (j = h = 0; h < a + 1; ++j) h += cbp[j].first;
+        --j;
+        na = spc[0][j].pop[gl - h + spc[0][j].pop.size()];
+        gm = gl - cbp[j].first;
+        b = rng(gm);
+        for (k = h = 0; h < b + 1; ++k) if (j != k) h += cbp[k].first;
+        --k;
+        nb = spc[0][k].pop[gl - h + spc[0][k].pop.size()];
+        ppn[1].push_back(rdn() < pud ? ncr(na, nb) : mft(ncr(na, nb)));
     }
-
-
-
-    //TODO FINISH REGEN
+    swap(ppn[0], ppn[1]);
+    ppn[1].clear();
     idn.clear();
     idl.clear();
 }
 
 int main() {
-    int tI, i;
+    int tI = 0, i;
+    FILE* flag;
     srand(0);
     init();
-    for (tI = 0; tI < T; ++tI) epoch(tI);
+    while (tI < T) {
+        if (flag = fopen("flag_epoch", "r")) {
+            fclose(flag);
+            remove("flag_epoch");
+            epoch(tI++);
+        }
+        this_thread::sleep_for(chrono::milliseconds(2000));
+    }
     //TODO OUTPUT RESULT
 }
