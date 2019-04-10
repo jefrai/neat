@@ -4,7 +4,7 @@ using namespace std;
 
 int T = 300, N = 150, inn = 0, inw = 0, ins = 0; //epochs, total population size, innovation numbers - node, edge, identifier of species
 int n0 = 200, n1 = 6; //input nodes, output nodes
-int lar = 5; //threshold for large species - unchanged copy of champion
+int lar = 1, mup = 6; //threshold for large species - unchanged copy of champion, passes of attempted mutation
 double stg = 4; //stagnation time constant
 double sig = 4.9; //sigmoid multiplier
 double cw1 = 1, cw2 = 1, cw3 = 0.4, delt = 3; //excess, disjoint, matching weight, threshold - compatibility constants
@@ -12,17 +12,17 @@ double mut = 0.8, rel = 0.9; //weight mutation rate, relative mutation vs absolu
 double mug = 0.25, msg = 0.5, muh = 0.7, msh = 0.6; //{intensity, standard deviation} of relative mutation, absolute mutation
 double dsi = 0.75, dtd = 0.05, dte = 0.05; //gene deactivation inheritance, gene deactivation mutation rate, gene activation mutation rate
 double adn = 0.06, adw = 0.16; //rate of edge-split node addition mutation, edge addition mutation
-double sur = 0.7, isp = 0.005; //proportion of immediate survival, interspecies mating rate
+double sur = 0.7, isp = 0.05; //proportion of immediate survival, interspecies mating rate
 double pur = 0.25, pum = 0.04, pud = 0.1; //probability of descent with mutation absent crossover, neither given former, descent with crossover absent mutation
 queue<int> q; //heap queue for network query - node identifiers
-map<int, pair<int, double> > m; //heap map for network query - node identifiers to remaining edge dependencies, activation
+vector<pair<int, double> > m; //heap vector for network query - node identifiers to remaining edge dependencies, activation
 map<int, int> rm; //heap map for phenotype node index based on identifier
 map<int, int> idn; //duplication removal map for node addition - identifier of split edge
 map<pair<int, int>, int> idl; //duplication removal map for edge addition - identifier of two nodes
 
 inline bool eq(double a, double b) {return fabs(a - b) < 0.0001;}
 inline double sgm(double x) {return 1 / (1 + exp(-sig * x));}
-inline long long rng(long long n) {long long i = 0, j; for (j = 0; j < 6; ++j) i *= RAND_MAX, i += rand(), i %= n; return n;}
+inline long long rng(long long n) {long long i = 0, j; for (j = 0; j < 6; ++j) i *= RAND_MAX, i += rand(), i %= n; return i;}
 inline double rdn() {return ((double) rng(1000000001)) / 1000000000;}
 default_random_engine nrmgn;
 normal_distribution<double> dsg(0, msg), dsh(0, msh);
@@ -43,6 +43,8 @@ struct edg {
 };
 
 struct edgcmp {inline bool operator() (const edg& a, const edg& b) {return (a.n < b.n);}};
+
+vector<double> qv, esr;
 
 struct net {
     bool E = 0; //fitness evaluated
@@ -70,23 +72,35 @@ struct net {
     }
 
     bool trv(int a, int b) { //check if b is accessible from a - prevent cycles
+        printf("tr %d -> %d\n", a, b);
         int i, j;
         queue<int> q;
         vector<bool> vt;
         vt.assign(node.size(), 0);
+        for (i = 0; i < node.size(); ++i) rm[node[i]] = i;
         q.push(a);
         while (!q.empty() && q.front() != b) {
+            printf("trv %d / %d, %d: %d\n", q.front(), vt.size(), adj.size(), (int) vt[q.front()]);
             i = q.front();
+            printf("_\n");
             q.pop();
+            printf("__\n");
             if (vt[i]) continue;
+            printf("___\n");
             vt[i] = 1;
-            for (j = 0; j < adj[i].size(); ++j) if (!vt[adj[i][j].b]) q.push(adj[i][j].b);
+            printf("____\n");
+            for (j = 0; j < adj[i].size(); ++j) {assert(rm.find(adj[i][j].b) != rm.end()); printf("TRV %d %d | %d\n", i, rm[adj[i][j].b], adj[i][j].b); if (!vt[rm[adj[i][j].b]]) q.push(rm[adj[i][j].b]);}
+            printf("_____\n");
         }
+        printf("______\n");
+        rm.clear();
+        printf("_______\n");
         return !q.empty();
     }
 
     bool dhe(int a, int b) { //check if there already exists a direct edge from a to b
-        for (int i = 0; i < adj[a].size(); ++i) if (adj[a][i].b == b) return 1;
+        printf("dhe %d %d\n", a, b);
+        for (int i = 0; i < adj[a].size(); ++i) {printf("DHE %d | %d -> %d | (%d)\n", a, node[a], adj[a][i].b, node[b]); if (adj[a][i].b == node[b]) return 1;}
         return 0;
     }
 
@@ -100,78 +114,90 @@ struct net {
         return 1;
     }
 
-    vector<double> query(vector<double> v) { //run network
-        assert(v.size() == n0);
+    void query() { //run network
+        assert(qv.size() == n0);
         int i, j;
-        for (i = 0; i < node.size(); ++i) m[node[i]] = make_pair(ret[i].size(), i < n0 + 1 ? (i < n0 ? v[i] : 1000000000) : 0);
-        for (i = 0; i < n0 + 1; ++i) q.push(i);
+        for (i = 0; i < node.size(); ++i) m.push_back(make_pair(ret[i].size(), i < n0 + 1 ? (i < n0 ? qv[i] : 1000000000) : 0));
+        for (i = 0; i < n0 + 1; ++i) if (!m[i].first) q.push(i);
         while (!q.empty()) {
             i = q.front();
             for (j = 0; j < adj[i].size(); ++j) {
-                if (adj[i][j].e) m[adj[i][j].b].second += sgm(m[i].second) * adj[i][j].w;
-                if (!--m[adj[i][j].b].first) q.push(adj[i][j].b);
+                if (adj[i][j].e) m[rm[adj[i][j].b]].second += sgm(m[i].second) * adj[i][j].w;
+                if (!--m[rm[adj[i][j].b]].first) q.push(rm[adj[i][j].b]);
             }
             q.pop();
         }
-        vector<double> rs;
-        for (i = n0 + 1; i < n0 + n1 + 1; ++i) rs.push_back(sgm(m[node[i]].second));
+        for (i = n0 + 1; i < n0 + n1 + 1; ++i) esr.push_back(sgm(m[i].second));
         m.clear();
-        return rs;
+        qv.clear();
+        rm.clear();
     }
 };
 
 struct invnetcmp {inline bool operator() (const net& a, const net& b) {return (a.F > b.F);}};
 
 net mft(net _n) { //mutate
-    int a, b;
+    int a, b, zf, i;
     net n = _n;
     n.muw();
-    if (rdn() < adn) { //new node + 2 edges
-        edg* eg = &n.edge[rng(n.edge.size())];
-        a = eg->a;
-        b = eg->b;
-        int c = (idn.find(eg->n) != idn.end() ? idn[eg->n] : idn[eg->n] = inn++);
-        n.node.push_back(c);
-        edg ea, eb;
-        ea.n = (idl.find(make_pair(a, c)) != idl.end() ? idl[make_pair(a, c)] : idl[make_pair(a, c)] = inw++);
-        ea.a = a;
-        ea.b = c;
-        ea.e = eg->e;
-        ea.w = 1;
-        ea.n = (idl.find(make_pair(c, b)) != idl.end() ? idl[make_pair(c, b)] : idl[make_pair(c, b)] = inw++);
-        eb.a = c;
-        eb.b = b;
-        eb.e = eg->e;
-        eb.w = eg->w;
-        if (ea.n > eb.n) swap(ea, eb);
-        n.edge.push_back(ea);
-        n.edge.push_back(eb);
-        eg->e = 0;
-    }
-    if (rdn() < adw) { //new edge
-        a = b = -1;
-        while (n.dhe(a, b)) {while (a == b) a = n.node[rng(n.node.size())], b = n.node[rng(n.node.size())]; if (n.trv(b, a)) swap(a, b);} //new, acyclic edge
-        edg eg;
-        eg.n = (idl.find(make_pair(a, b)) != idl.end() ? idl[make_pair(a, b)] : idl[make_pair(a, b)] = inw++);
-        eg.a = a;
-        eg.b = b;
-        eg.e = 1;
-        eg.w = (rdn() * 2 - 1) * muh;
+    for (i = 0; i < mup; ++i) {
+        if (rdn() < adn && !n.edge.empty()) { //new node + 2 edges
+            printf("mutating node\n");
+            edg* eg = &n.edge[rng(n.edge.size())];
+            a = eg->a;
+            b = eg->b;
+            int c = (idn.find(eg->n) != idn.end() ? idn[eg->n] : idn[eg->n] = inn++);
+            n.node.push_back(c);
+            edg ea, eb;
+            ea.n = (idl.find(make_pair(a, c)) != idl.end() ? idl[make_pair(a, c)] : idl[make_pair(a, c)] = inw++);
+            ea.a = a;
+            ea.b = c;
+            ea.e = eg->e;
+            ea.w = 1;
+            ea.n = (idl.find(make_pair(c, b)) != idl.end() ? idl[make_pair(c, b)] : idl[make_pair(c, b)] = inw++);
+            eb.a = c;
+            eb.b = b;
+            eb.e = eg->e;
+            eb.w = eg->w;
+            if (ea.n > eb.n) swap(ea, eb);
+            n.edge.push_back(ea);
+            n.edge.push_back(eb);
+            eg->e = 0;
+        } else if (rdn() < adw) { //new edge
+            printf("mutating edge\n");
+            printf("nodes: %d\n", n.node.size());
+            a = b = -1;
+            for (zf = 0; zf < 10 && ((a < 0 && b < 0) || n.dhe(a, b)); ++zf) {do {a = rng(n.node.size()); b = rng(n.node.size());} while (a == b); if (n.trv(b, a)) swap(a, b);} //new, acyclic edge
+            if (zf > 9) continue;
+            a = n.node[a];
+            b = n.node[b];
+            printf("%d -> %d\n", a, b);
+            edg eg;
+            eg.n = (idl.find(make_pair(a, b)) != idl.end() ? idl[make_pair(a, b)] : idl[make_pair(a, b)] = inw++);
+            eg.a = a;
+            eg.b = b;
+            eg.e = 1;
+            eg.w = (rdn() * 2 - 1) * muh;
+            n.edge.push_back(eg);
+        }
+        n.reg();
     }
     return n;
 }
 
 net ncr(net a, net b) { //crossbreed
+    printf("crossbreeding\n");
     int i, j;
     if (a.F < b.F) swap(a, b);
     for (i = j = 0; i < a.edge.size(); ++i) {
         while (j < b.edge.size() && b.edge[j].n < a.edge[i].n) ++j;
-        if (a.edge[i].n == b.edge[i].n) {
+        if (j < b.edge.size() && a.edge[i].n == b.edge[j].n) {
             a.edge[i].w = rng(2) ? b.edge[j].w : a.edge[i].w;
-            a.edge[i].e = (a.edge[i].e && b.edge[i].e) ? 1 : (rdn() > dsi);
+            a.edge[i].e = (a.edge[i].e && b.edge[j].e) ? 1 : (rdn() > dsi);
         }
     }
     if (rdn() > pud) a = mft(a);
+    a.reg();
     return a;
 }
 
@@ -185,8 +211,11 @@ struct spec {
         int a, b;
         sort(pop.begin(), pop.end(), invnetcmp());
         spec spr = *this;
+        spr.pop.clear();
         if (r >= lar) spr.pop.push_back(pop[0]);
         while (spr.pop.size() < r) {
+            printf("species descending %d / %d\n", spr.pop.size(), r);
+
             if (rdn() < pur) spr.pop.push_back(rdn() < pum ? pop[rng(m)] : mft(pop[rng(m)]));
             else {
                 a = rng(m);
@@ -208,6 +237,7 @@ struct spec {
         int c, mt = 0, i;
         double dst = 0, mdw = 0;
         if (a.edge.size() < b.edge.size()) swap(a, b);
+        if (a.edge.empty()) return 1;
         sort(a.node.begin(), a.node.end());
         sort(b.node.begin(), b.node.end());
         for (i = 0; i < a.edge.size(); ++i) {
@@ -246,7 +276,7 @@ inline void init() {
     if (cut) {
         for (i = 0; i < N; ++i) {
             ppn[0].push_back(nnet);
-            fscanf(srf, "%d %d %d %d", &M, &L, &ppn[0].back().E, &ppn[0].back().F);
+            fscanf(srf, "%d %d %d %lf", &M, &L, &ppn[0].back().E, &ppn[0].back().F);
             for (j = 0; j < M; ++j) fscanf(srf, "%d", &n), ppn[0].back().node.push_back(n);
             for (j = 0; j < L; ++j) {
                 fscanf(srf, "%d %d %d %lf %d", &n, &a, &b, &w, &e);
@@ -269,68 +299,67 @@ inline void store(string stg) {
 
     int i, j;
     FILE* res = fopen(stg.c_str(), "w");
-    fprintf(res, "%d %d %d %d", N, T, n0, n1);
-    fprintf(res, "%d %d %d %d", inn, inw, ins, 1);
+    fprintf(res, "%d %d %d %d\n", N, T, n0, n1);
+    fprintf(res, "%d %d %d %d\n", inn, inw, ins, 1);
     for (i = 0; i < N; ++i) {
         ppn[0].push_back(nnet);
-        fprintf(res, "%d %d %d %d", ppn[0][i].node.size(), ppn[0][i].edge.size(), ppn[0][i].E, ppn[0][i].F);
-        for (j = 0; j < ppn[0][i].node.size(); ++j) fprintf(res, "%d", ppn[0][i].node[j]);
-        for (j = 0; j < ppn[0][i].edge.size(); ++j) fprintf(res, "%d %d %d %lf %d", ppn[0][i].edge[j].n, ppn[0][i].edge[j].a, ppn[0][i].edge[j].b, ppn[0][i].edge[j].w, ppn[0][i].edge[j].e);
+        fprintf(res, "\n%d %d %d %f\n", ppn[0][i].node.size(), ppn[0][i].edge.size(), ppn[0][i].E, ppn[0][i].F);
+        for (j = 0; j < ppn[0][i].node.size(); ++j) fprintf(res, "%d%c", ppn[0][i].node[j], j < ppn[0][i].node.size() - 1 ? ' ' : '\n');
+        for (j = 0; j < ppn[0][i].edge.size(); ++j) fprintf(res, "%d %d %d %f %d\n", ppn[0][i].edge[j].n, ppn[0][i].edge[j].a, ppn[0][i].edge[j].b, ppn[0][i].edge[j].w, ppn[0][i].edge[j].e);
     }
     fclose(res);
+}
+
+inline double eval(int n) {
+    int x, tL = 0, i;
+    double F;
+    FILE* flag, *in, *out;
+    while (!(flag = fopen("run.txt", "w"))) this_thread::sleep_for(chrono::microseconds(1000));
+    fclose(flag);
+    while (1) {
+        if (flag = fopen("end.txt", "r")) {
+            fscanf(flag, "%lf", &F);
+            fclose(flag);
+            while (remove("end.txt"));
+            break;
+        }
+        if (in = fopen("input.txt", "r")) {
+            printf("input %d\n", tL++);
+
+            for (i = 0; i < n0; ++i) fscanf(in, "%d", &x), qv.push_back(x);
+            fclose(in);
+            while (remove("input.txt"));
+            ppn[0][n].query();
+            while (!(out = fopen("output.txt", "w"))) this_thread::sleep_for(chrono::microseconds(1000));
+            for (i = 0; i < esr.size(); ++i) fprintf(out, "%f%c", esr[i], i < esr.size() - 1 ? ' ' : '\n');
+            fclose(out);
+            esr.clear();
+        }
+        this_thread::sleep_for(chrono::microseconds(1000));
+    }
+    return F;
 }
 
 char buf[1000]; //epoch process buffer
 
 inline void epoch(int tI) {
-    printf("epoch %d\n", tI);
+    printf("\nepoch %d\n", tI);
 
     int np = 0, gl = 0, gm = 0, h, sf = 0, a, b, i, j, k;
     double sum = 0;
     spec tsp;
     net na, nb;
     for (i = 0; i < N; ++i) if (!ppn[0][i].E) {
-        printf("net %d (%d)\n", i, ppn[0][i].E);
-        fflush(stdout);
-        FILE* tor = fopen("net.txt", "w"), *flag;
-        fprintf(tor, "%d %d %d %d\n", n0, n1, ppn[0][i].node.size(), ppn[0][i].edge.size());
-        for (j = 0; j < ppn[0][i].node.size(); ++j) fprintf(tor, "%d\n", ppn[0][i].node[j]);
-        for (j = 0; j < ppn[0][i].edge.size(); ++j) fprintf(tor, "%d %d %d %lf %d\n", ppn[0][i].edge[j].n, ppn[0][i].edge[j].a, ppn[0][i].edge[j].b, ppn[0][i].edge[j].w, ppn[0][i].edge[j].e);
-        fclose(tor);
+        printf("net %d\n", i);
 
-        //TODO - VALIDIFY THIS THING
-        STARTUPINFO info={sizeof(info)};
-        PROCESS_INFORMATION processInfo;
-        GetModuleFileName(NULL, buf, sizeof(buf) / sizeof(TCHAR));
-        int fls = string(buf).find_last_of("\\/");
-        if (CreateProcess((string(buf).substr(0, fls) + "\\morerandom.exe").c_str(), NULL, NULL, NULL, TRUE, 0, NULL, NULL, &info, &processInfo)) {
-            /*WaitForSingleObject(processInfo.hProcess, INFINITE);
-            CloseHandle(processInfo.hProcess);
-            CloseHandle(processInfo.hThread);*/
-        } else printf("failure\n");
-        while (1) {
-            if (flag = fopen("ready.txt", "r")) {
-                fclose(flag);
-                remove("ready.txt");
-                break;
-            }
-            this_thread::sleep_for(chrono::milliseconds(50));
-        }
-        this_thread::sleep_for(chrono::milliseconds(3000));
-
-        flag = fopen("run.txt", "w");
-        fclose(flag);
-        while (1) {
-            if (flag = fopen("score.txt", "r")) {
-                fscanf(flag, "%lf", &ppn[0][i].F);
-                ppn[0][i].E = 1;
-                fclose(flag);
-                remove("score.txt");
-                break;
-            }
-            this_thread::sleep_for(chrono::milliseconds(200));
-        }
+        ppn[0][i].F = eval(i);
+        ppn[0][i].E = 1;
     }
+    store("intermediates/epoch " + to_string(tI) + " end.txt");
+    if (tI + 1 == T) store("res.txt");
+
+    printf("epoch %d evaluated\n", tI);
+
     vector<pair<int, int> > cbp; //bottleneck and regeneration
     for (i = 0; i < N; ++i) {
         for (j = 0; j < spc[0].size(); ++j) if (spec::eq(ppn[0][i], spc[0][j].rep)) {spc[0][j].pop.push_back(ppn[0][i]); break;}
@@ -341,44 +370,77 @@ inline void epoch(int tI) {
             spc[0].back().rep = ppn[0][i];
         }
     }
-    for (i = 0; i < N; ++i) np += rdn() > isp;
+    for (i = 0; i < spc[0].size(); ++i) if (!spc[0][i].pop.empty()) spc[1].push_back(spc[0][i]);
+    swap(spc[0], spc[1]);
+    spc[1].clear();
+
+    printf("%d species\n", spc[0].size());
+    for (i = 0; i < spc[0].size(); ++i) printf("sp %d: %d\n", i, spc[0][i].pop.size());
+
+    if (spc[0].size() > 1) for (i = 0; i < N; ++i) np += rdn() < isp;
+
+    printf("%d normal %d interspecies\n", N - np, np);
+
     for (i = 0; i < spc[0].size(); ++i) spc[0][i].cmf(), sum += spc[0][i].F;
     for (i = 0; i < spc[0].size(); ++i) cbp.push_back(make_pair(max((int) (spc[0][i].pop.size() * sur), 1), (N - np) * spc[0][i].F / sum)), gl += max((int) (spc[0][i].pop.size() * sur), 1), sf += (N - np) * spc[0][i].F / sum;
     for (i = sf; i < N - np; ++i) ++cbp[rng(spc[0].size())].second;
+
+    for (i = 0; i < spc[0].size(); ++i) printf("species %d: %d bottleneck %d final\n", i, cbp[i].first, cbp[i].second);
+
     for (i = 0; i < spc[0].size(); ++i) if (cbp[i].second) {
         tsp = spc[0][i].sbp(cbp[i].first, cbp[i].second);
-        for (j = 0; j < tsp.pop.size(); ++j) ppn[1].push_back(tsp.pop[j]);
+
+        printf("%d descended successfully\n", i);
+
+        for (j = 0; j < tsp.pop.size(); ++j) ppn[1].push_back(tsp.pop[j]), ppn[1].back().reg();
         spc[1].push_back(spc[0][i]);
-        spc[1].back().rep = spc[1].back().pop[rng(spc[1].back().pop.size())];
+
+        printf("%d rep candidates\n", spc[1].back().pop.size());
+
+        spc[1].back().rep = spc[1].back().pop[(int) rng(spc[1].back().pop.size())];
         spc[1].back().pop.clear();
         ++spc[1].back().ag;
         if (spc[1].back().mf < spc[1].back().F && !eq(spc[1].back().mf, spc[1].back().F)) {spc[1].back().mf = spc[1].back().F; spc[1].back().ls = 0;}
         else ++spc[1].back().ls;
         spc[1].back().F = 0;
     }
-    swap(spc[0], spc[1]);
-    spc[1].clear();
+
     for (i = 0; i < np; ++i) {
+        printf("?%d / %d\n", i, np);
         a = rng(gl);
         for (j = h = 0; h < a + 1; ++j) h += cbp[j].first;
         --j;
-        na = spc[0][j].pop[gl - h + spc[0][j].pop.size()];
+
+        printf("?! %d / %d -> %d: %d / %d\n", a, gl, j, a - h + cbp[j].first, cbp[j].first);
+
+        na = spc[0][j].pop[a - h + cbp[j].first];
         gm = gl - cbp[j].first;
         b = rng(gm);
         for (k = h = 0; h < b + 1; ++k) if (j != k) h += cbp[k].first;
         --k;
-        nb = spc[0][k].pop[gl - h + spc[0][k].pop.size()];
+
+        printf("!? %d / %d -> %d: %d / %d\n", b, gm, k, b - h + cbp[k].first, cbp[k].first);
+
+        nb = spc[0][k].pop[b - h + cbp[k].first];
         ppn[1].push_back(rdn() < pud ? ncr(na, nb) : mft(ncr(na, nb)));
         ppn[1].back().reg();
     }
+
+    printf("%d new species\n", spc[1].size());
+    for (i = 0; i < spc[1].size(); ++i) printf("sp %d: %d\n", i, spc[1][i].pop.size());
+
+    swap(spc[0], spc[1]);
+    spc[1].clear();
     swap(ppn[0], ppn[1]);
+    for (i = 0; i < N; ++i) ppn[0][i].E = ppn[0][i].F = 0;
     ppn[1].clear();
     idn.clear();
     idl.clear();
-    store("intermediates/epoch" + to_string(tI) + ".txt");
+    store("intermediates/epoch " + to_string(tI + 1) + " begin.txt");
 }
 
 int main() {
+    SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
     int tI = 0, i;
     FILE* flag;
     //srand(0);
@@ -391,20 +453,10 @@ int main() {
             printf("init flag received\n");
             break;
         }
-        this_thread::sleep_for(chrono::milliseconds(3000));
+        this_thread::sleep_for(chrono::milliseconds(1000));
     }
     init();
-    while (tI < T) {
-        /*if (flag = fopen("flag_epoch", "r")) {
-            fclose(flag);
-            remove("flag_epoch");
-            epoch(tI++);
-            store();
-        }
-        this_thread::sleep_for(chrono::milliseconds(3000));*/
-        epoch(tI++);
-    }
-    store("res.txt");
+    while (tI < T) epoch(tI++);
     flag = fopen("kys.txt", "w");
     fclose(flag);
     return 0;

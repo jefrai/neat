@@ -6,7 +6,7 @@ double B[8], r;
 
 int main() {
     int N, i, j;
-    for (i = 0; i < 8; ++i) A[i] = __builtin_popcount(i);
+    for (i = 0; i < 8; ++i) A[i] = __builtin_popcount(i) % 2;
     FILE* fl = fopen("init.txt", "w");
     fprintf(fl, "%d %d\n", 3, 1);
     fclose(fl);
@@ -21,32 +21,31 @@ int main() {
             break;
         }
         if (fl = fopen("run.txt", "r")) {
-            printf("tester beginning ops\n");
+            printf("running net\n");
 
             fclose(fl);
             remove("run.txt");
             for (i = 0; i < 8; ++i) {
-                printf("attempting %d\n", i);
+                printf("input %d\n", i);
 
-                fl = fopen("input.txt", "w");
+                while (!(fl = fopen("input.txt", "w"))) this_thread::sleep_for(chrono::microseconds(1000));
                 for (j = 0; j < 3; ++j) fprintf(fl, "%d%c", i & (1 << j), i < 7 ? ' ' : '\n');
                 fclose(fl);
                 this_thread::sleep_for(chrono::milliseconds(100));
-                if (!(fl = fopen("output.txt", "r"))) {printf("FAILURE\n"); while(1);}
+                while (!(fl = fopen("output.txt", "r"))) printf("FAILURE\n"), this_thread::sleep_for(chrono::milliseconds(30));
                 fscanf(fl, "%lf", &B[i]);
                 fclose(fl);
                 remove("output.txt");
-
-                printf("finished %d\n", i);
             }
-            for (i = r = 0; i < 8; ++i) r += (A[i] - B[i]) * (A[i] - B[i]);
-            fl = fopen("end.txt", "w");
-            fprintf(fl, "%lf", r);
+            for (i = r = 0; i < 8; ++i) r += 1 - (A[i] - B[i]) * (A[i] - B[i]);
+            while (!(fl = fopen("end.txt", "w"))) this_thread::sleep_for(chrono::microseconds(1000));
+            printf("score %f\n", r);
+            fprintf(fl, "%f", r);
             fclose(fl);
 
-            printf("tester ending ops\n");
+            printf("finished net\n");
         }
-        this_thread::sleep_for(chrono::milliseconds(100));
+        this_thread::sleep_for(chrono::milliseconds(10));
     }
     return 0;
 }
