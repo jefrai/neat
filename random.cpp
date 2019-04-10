@@ -63,6 +63,8 @@ struct net {
         int i;
         adj.clear();
         ret.clear();
+        adj.resize(node.size());
+        ret.resize(node.size());
         for (i = 0; i < node.size(); ++i) rm[node[i]] = i;
         for (i = 0; i < edge.size(); ++i) adj[rm[edge[i].a]].push_back(edge[i]), ret[rm[edge[i].b]].push_back(edge[i]);
     }
@@ -101,7 +103,7 @@ struct net {
     vector<double> query(vector<double> v) { //run network
         assert(v.size() == n0);
         int i, j;
-        for (i = 0; i < node.size(); ++i) m[node[i]] = make_pair(ret[i].size(), i < n0 + 1 ? (i < n0 ? v[i] : 1) : 0);
+        for (i = 0; i < node.size(); ++i) m[node[i]] = make_pair(ret[i].size(), i < n0 + 1 ? (i < n0 ? v[i] : 1000000000) : 0);
         for (i = 0; i < n0 + 1; ++i) q.push(i);
         while (!q.empty()) {
             i = q.front();
@@ -234,6 +236,9 @@ inline void init() {
     int M, L, n, a, b, e, al0, al1, i, j;
     double w;
     bool cut; //custom nets
+
+    printf("getting src\n");
+
     FILE* srf = fopen("src.txt", "r");
     fscanf(srf, "%d %d %d %d", &N, &T, &al0, &al1);
     fscanf(srf, "%d %d %d %d", &inn, &inw, &ins, &cut);
@@ -255,16 +260,38 @@ inline void init() {
         for (i = 0; i < N; ++i) ppn[0].push_back(iet);
     }
     fclose(srf);
+
+    printf("src received\n");
+}
+
+inline void store(string stg) {
+    cout << "storing to " << stg << endl;
+
+    int i, j;
+    FILE* res = fopen(stg.c_str(), "w");
+    fprintf(res, "%d %d %d %d", N, T, n0, n1);
+    fprintf(res, "%d %d %d %d", inn, inw, ins, 1);
+    for (i = 0; i < N; ++i) {
+        ppn[0].push_back(nnet);
+        fprintf(res, "%d %d %d %d", ppn[0][i].node.size(), ppn[0][i].edge.size(), ppn[0][i].E, ppn[0][i].F);
+        for (j = 0; j < ppn[0][i].node.size(); ++j) fprintf(res, "%d", ppn[0][i].node[j]);
+        for (j = 0; j < ppn[0][i].edge.size(); ++j) fprintf(res, "%d %d %d %lf %d", ppn[0][i].edge[j].n, ppn[0][i].edge[j].a, ppn[0][i].edge[j].b, ppn[0][i].edge[j].w, ppn[0][i].edge[j].e);
+    }
+    fclose(res);
 }
 
 char buf[1000]; //epoch process buffer
 
 inline void epoch(int tI) {
+    printf("epoch %d\n", tI);
+
     int np = 0, gl = 0, gm = 0, h, sf = 0, a, b, i, j, k;
     double sum = 0;
     spec tsp;
     net na, nb;
     for (i = 0; i < N; ++i) if (!ppn[0][i].E) {
+        printf("net %d (%d)\n", i, ppn[0][i].E);
+        fflush(stdout);
         FILE* tor = fopen("net.txt", "w"), *flag;
         fprintf(tor, "%d %d %d %d\n", n0, n1, ppn[0][i].node.size(), ppn[0][i].edge.size());
         for (j = 0; j < ppn[0][i].node.size(); ++j) fprintf(tor, "%d\n", ppn[0][i].node[j]);
@@ -274,12 +301,22 @@ inline void epoch(int tI) {
         //TODO - VALIDIFY THIS THING
         STARTUPINFO info={sizeof(info)};
         PROCESS_INFORMATION processInfo;
-        if (CreateProcess(GetModuleFileName(NULL, buf, sizeof(buf) / sizeof(TCHAR)) + "morerandom.exe", NULL, NULL, NULL, TRUE, 0, NULL, NULL, &info, &processInfo))
-        {
-            WaitForSingleObject(processInfo.hProcess, INFINITE);
+        GetModuleFileName(NULL, buf, sizeof(buf) / sizeof(TCHAR));
+        int fls = string(buf).find_last_of("\\/");
+        if (CreateProcess((string(buf).substr(0, fls) + "\\morerandom.exe").c_str(), NULL, NULL, NULL, TRUE, 0, NULL, NULL, &info, &processInfo)) {
+            /*WaitForSingleObject(processInfo.hProcess, INFINITE);
             CloseHandle(processInfo.hProcess);
-            CloseHandle(processInfo.hThread);
+            CloseHandle(processInfo.hThread);*/
+        } else printf("failure\n");
+        while (1) {
+            if (flag = fopen("ready.txt", "r")) {
+                fclose(flag);
+                remove("ready.txt");
+                break;
+            }
+            this_thread::sleep_for(chrono::milliseconds(50));
         }
+        this_thread::sleep_for(chrono::milliseconds(3000));
 
         flag = fopen("run.txt", "w");
         fclose(flag);
@@ -291,7 +328,7 @@ inline void epoch(int tI) {
                 remove("score.txt");
                 break;
             }
-            this_thread::sleep_for(chrono::milliseconds(3000));
+            this_thread::sleep_for(chrono::milliseconds(200));
         }
     }
     vector<pair<int, int> > cbp; //bottleneck and regeneration
@@ -338,20 +375,7 @@ inline void epoch(int tI) {
     ppn[1].clear();
     idn.clear();
     idl.clear();
-}
-
-inline void store() {
-    int i, j;
-    FILE* res = fopen("res.txt", "w");
-    fprintf(res, "%d %d %d %d", N, T, n0, n1);
-    fprintf(res, "%d %d %d %d", inn, inw, ins, 1);
-    for (i = 0; i < N; ++i) {
-        ppn[0].push_back(nnet);
-        fprintf(res, "%d %d %d %d", ppn[0][i].node.size(), ppn[0][i].edge.size(), ppn[0][i].E, ppn[0][i].F);
-        for (j = 0; j < ppn[0][i].node.size(); ++j) fprintf(res, "%d", ppn[0][i].node[j]);
-        for (j = 0; j < ppn[0][i].edge.size(); ++j) fprintf(res, "%d %d %d %lf %d", ppn[0][i].edge[j].n, ppn[0][i].edge[j].a, ppn[0][i].edge[j].b, ppn[0][i].edge[j].w, ppn[0][i].edge[j].e);
-    }
-    fclose(res);
+    store("intermediates/epoch" + to_string(tI) + ".txt");
 }
 
 int main() {
@@ -364,6 +388,7 @@ int main() {
             fscanf(flag, "%d %d", &n0, &n1);
             fclose(flag);
             remove("init.txt");
+            printf("init flag received\n");
             break;
         }
         this_thread::sleep_for(chrono::milliseconds(3000));
@@ -379,6 +404,7 @@ int main() {
         this_thread::sleep_for(chrono::milliseconds(3000));*/
         epoch(tI++);
     }
+    store("res.txt");
     flag = fopen("kys.txt", "w");
     fclose(flag);
     return 0;
