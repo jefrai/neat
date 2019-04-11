@@ -24,12 +24,12 @@ int main() {
             printf("running net\n");
 
             fclose(fl);
-            remove("run.txt");
+            while (!remove("run.txt"));
             for (i = 0; i < 8; ++i) {
                 printf("input %d\n", i);
 
                 while (!(fl = fopen("input.txt", "w"))) this_thread::sleep_for(chrono::microseconds(1000));
-                for (j = 0; j < 3; ++j) fprintf(fl, "%d%c", i & (1 << j), i < 7 ? ' ' : '\n');
+                for (j = 0; j < 3; ++j) fprintf(fl, "%d%c", !!(i & (1 << j)), i < 7 ? ' ' : '\n');
                 fclose(fl);
                 this_thread::sleep_for(chrono::milliseconds(100));
                 while (!(fl = fopen("output.txt", "r"))) printf("FAILURE\n"), this_thread::sleep_for(chrono::milliseconds(30));
@@ -37,7 +37,7 @@ int main() {
                 fclose(fl);
                 remove("output.txt");
             }
-            for (i = r = 0; i < 8; ++i) r += 1 - (A[i] - B[i]) * (A[i] - B[i]);
+            for (i = r = 0; i < 8; ++i) r += 1 - sqrt(fabs(A[i] - B[i]));
             while (!(fl = fopen("end.txt", "w"))) this_thread::sleep_for(chrono::microseconds(1000));
             printf("score %f\n", r);
             fprintf(fl, "%f", r);
