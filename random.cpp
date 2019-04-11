@@ -1,6 +1,10 @@
 #include <bits/stdc++.h>
 #include <windows.h>
+#include <io.h>
 using namespace std;
+
+//remember to use -U__STRICT_ANSI__ compiler flag
+HANDLE H;
 
 int T = 300, N = 150, inn = 0, inw = 0, ins = 0; //epochs, total population size, innovation numbers - node, edge, identifier of species
 int n0 = 200, n1 = 6; //input nodes, output nodes
@@ -72,7 +76,7 @@ struct net {
     }
 
     bool trv(int a, int b) { //check if b is accessible from a - prevent cycles
-        //printf("traversal check: %d -> %d\n", a, b);
+        printf("traversal check: %d -> %d\n", a, b);
         if (a < n0 + 1) return 1;
         if (n0 < b && b < n0 + 1 + n1) return 1;
         int i, j;
@@ -93,7 +97,7 @@ struct net {
     }
 
     bool dhe(int a, int b) { //check if there already exists a direct edge from a to b
-        //printf("dierct edge check: %d %d\n", a, b);
+        printf("direct edge check: %d %d\n", a, b);
         for (int i = 0; i < adj[a].size(); ++i) if (adj[a][i].b == node[b]) return 1;
         return 0;
     }
@@ -391,24 +395,25 @@ inline void store(string stg) {
 inline void eval(int n) {
     int x, tL = 0, i;
     FILE* flag, *in, *out;
-    while (!(flag = fopen("run.txt", "w"))) this_thread::sleep_for(chrono::microseconds(1000));
+    flag = fopen("run.txt", "w");
     fclose(flag);
     while (1) {
-        if (flag = fopen("end.txt", "r")) {
-            this_thread::sleep_for(chrono::milliseconds(50));
-            fscanf(flag, "%lf", &ppn[0][n].F);
+        if ((H = CreateFileA("end.txt", GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_FLAG_DELETE_ON_CLOSE, NULL)) != INVALID_HANDLE_VALUE) {
+            in = _fdopen(_open_osfhandle((int) H, 0), "r");
+            fscanf(in, "%lf", &ppn[0][n].F);
             printf("score %f\n", ppn[0][n].F);
             ppn[0][n].E = 1;
-            fclose(flag);
-            while (remove("end.txt"));
+            fclose(in);
+            CloseHandle(H);
             break;
         }
-        if (in = fopen("input.txt", "r")) {
+        if ((H = CreateFileA("input.txt", GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_FLAG_DELETE_ON_CLOSE, NULL)) != INVALID_HANDLE_VALUE) {
+            in = _fdopen(_open_osfhandle((int) H, 0), "r");
             printf("input %d\n", tL++);
 
             for (i = 0; i < n0; ++i) fscanf(in, "%d", &x), qv.push_back(x);
             fclose(in);
-            while (remove("input.txt"));
+            CloseHandle(H);
             ppn[0][n].query();
             while (!(out = fopen("output.txt", "w"))) this_thread::sleep_for(chrono::microseconds(1000));
             for (i = 0; i < esr.size(); ++i) fprintf(out, "%f%c", esr[i], i < esr.size() - 1 ? ' ' : '\n');

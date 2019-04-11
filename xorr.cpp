@@ -1,5 +1,9 @@
 #include <bits/stdc++.h>
+#include <windows.h>
+#include <io.h>
 using namespace std;
+
+//remember to use -U__STRICT_ANSI__ compiler flag
 
 int A[8];
 double B[8], r;
@@ -7,9 +11,10 @@ double B[8], r;
 int main() {
     int N, i, j;
     for (i = 0; i < 8; ++i) A[i] = __builtin_popcount(i) % 2;
-    FILE* fl = fopen("init.txt", "w");
-    fprintf(fl, "%d %d\n", 3, 1);
+    HANDLE H;
+    FILE* fl = _fdopen(_open_osfhandle((int) (H = CreateFileA("init.txt", GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL)), 0), "w");
     fclose(fl);
+    CloseHandle(H);
 
     printf("init.txt created\n");
 
