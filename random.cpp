@@ -7,8 +7,8 @@ using namespace std;
 HANDLE H;
 
 int T = 300, N = 150, inn = 0, inw = 0, ins = 0; //epochs, total population size, innovation numbers - node, edge, identifier of species
-int n0 = 200, n1 = 6; //input nodes, output nodes
-int lar = 1, mup = 400; //threshold for large species - unchanged copy of champion, passes of attempted mutation
+int n0 = 407, n1 = 6; //input nodes, output nodes
+int lar = 12, mup = 400; //threshold for large species - unchanged copy of champion, passes of attempted mutation
 double stg = 4; //stagnation time constant
 double sig = 4.9; //sigmoid multiplier
 double cw1 = 1, cw2 = 1, cw3 = 0.4, delt = 3; //excess, disjoint, matching weight, threshold - compatibility constants
@@ -76,7 +76,7 @@ struct net {
     }
 
     bool trv(int a, int b) { //check if b is accessible from a - prevent cycles
-        printf("traversal check: %d -> %d\n", a, b);
+        //printf("traversal check: %d -> %d\n", a, b);
         if (a < n0 + 1) return 1;
         if (n0 < b && b < n0 + 1 + n1) return 1;
         int i, j;
@@ -97,7 +97,7 @@ struct net {
     }
 
     bool dhe(int a, int b) { //check if there already exists a direct edge from a to b
-        printf("direct edge check: %d %d\n", a, b);
+        //printf("direct edge check: %d %d\n", a, b);
         for (int i = 0; i < adj[a].size(); ++i) if (adj[a][i].b == node[b]) return 1;
         return 0;
     }
@@ -140,7 +140,7 @@ net mft(net _n) { //mutate
     n.muw();
     for (i = 0; i < mup; ++i) {
         if (rdn() < adn && !n.edge.empty()) { //new node + 2 edges
-            printf("mutating node\n");
+            //printf("mutating node\n");
             edg* eg = &n.edge[rng(n.edge.size())];
             a = eg->a;
             b = eg->b;
@@ -163,7 +163,7 @@ net mft(net _n) { //mutate
             //printf("!? %d %d: %d -> %d, %d -> %d\n", ea.n, eb.n, ea.a, ea.b, eb.a, eb.b);
             eg->e = 0;
         } else if (rdn() < adw) { //new edge
-            printf("mutating edge\n");
+            //printf("mutating edge\n");
             //printf("nodes: %d\n", n.node.size());
             a = b = -1;
             for (zf = 0; zf < 10 && ((a < 0 && b < 0) || n.trv(b, a) || n.dhe(a, b)); ++zf) {do {a = rng(n.node.size()); b = rng(n.node.size());} while (a == b); if (n.trv(b, a)) swap(a, b);} //new, acyclic edge
@@ -185,7 +185,7 @@ net mft(net _n) { //mutate
 }
 
 net ncr(net a, net b) { //crossbreed
-    printf("crossbreeding\n");
+    //printf("crossbreeding\n");
     int i, j;
     if (a.F < b.F) swap(a, b);
     for (i = j = 0; i < a.edge.size(); ++i) {
@@ -211,9 +211,9 @@ struct spec {
         sort(pop.begin(), pop.end(), invnetcmp());
         spec spr = *this;
         spr.pop.clear();
-        if (r >= lar) spr.pop.push_back(pop[0]);
+        if (r >= lar) {printf("sp %d: descending best unmutated\n"); spr.pop.push_back(pop[0]);}
         while (spr.pop.size() < r) {
-            //printf("species descending %d / %d\n", spr.pop.size(), r);
+            printf("sp %d: descending %d of %d\n", n, spr.pop.size(), r);
 
             if (rdn() < pur) spr.pop.push_back(rdn() < pum ? pop[rng(m)] : mft(pop[rng(m)]));
             else {
@@ -285,7 +285,7 @@ void augm() {
     if (spc[0].size() > 1) for (i = 0; i < N; ++i) np += rdn() < isp;
 
     printf("%d normal %d interspecies:\n", N - np, np);
-    for (i = 0; i < N; ++i) printf("%d %f\n", i, ppn[0][i].F);
+    for (i = 0; i < N; ++i) printf("net %d: score %f\n", i, ppn[0][i].F);
 
     for (i = 0; i < spc[0].size(); ++i) spc[0][i].cmf(), sum += spc[0][i].F;
     for (i = 0; i < spc[0].size(); ++i) cbp.push_back(make_pair(max((int) (spc[0][i].pop.size() * sur), 1), (N - np) * spc[0][i].F / sum)), gl += max((int) (spc[0][i].pop.size() * sur), 1), sf += (N - np) * spc[0][i].F / sum;
@@ -296,12 +296,12 @@ void augm() {
     for (i = 0; i < spc[0].size(); ++i) if (cbp[i].second) {
         tsp = spc[0][i].sbp(cbp[i].first, cbp[i].second);
 
-        printf("species %d descended succesfully\n", i);
+        printf("species %d descended successfully\n", i);
 
         for (j = 0; j < tsp.pop.size(); ++j) ppn[1].push_back(tsp.pop[j]), ppn[1].back().reg();
         spc[1].push_back(spc[0][i]);
 
-        printf("species %d: %d rep candidates\n", i, spc[1].back().pop.size());
+        printf("species %d: %d genomes\n", i, spc[1].back().pop.size());
 
         spc[1].back().rep = spc[1].back().pop[(int) rng(spc[1].back().pop.size())];
         spc[1].back().pop.clear();
