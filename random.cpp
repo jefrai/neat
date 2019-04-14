@@ -195,7 +195,6 @@ net ncr(net a, net b) { //crossbreed
             a.edge[i].e = (a.edge[i].e && b.edge[j].e) ? 1 : (rdn() > dsi);
         }
     }
-    if (rdn() > pud) a = mft(a);
     a.reg();
     return a;
 }
